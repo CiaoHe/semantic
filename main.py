@@ -490,7 +490,7 @@ def lc_sequence(sen1, sen2):
     dp = np.zeros((len1 + 1, len2 + 1), dtype=np.int)
     for i in range(1, len1 + 1):
         for j in range(1, len2 + 1):
-            if len1[i - 1] == len2[j - 1]:
+            if sen1[i - 1] == sen2[j - 1]:
                 dp[i][j] = dp[i - 1][j - 1] + 1
             else:
                 dp[i][j] = max(dp[i][j - 1], dp[i - 1][j])
@@ -545,12 +545,12 @@ def main():
     test_w_overlap_feature = joblib.load("pkl/test_w123_gram_overlap.pkl")
     test_c_overlap_feature=joblib.load("pkl/test_c2345_gram_overlap.pkl")
 
-    train_edit_feature = joblib.load("pkl/train_edit_feature.pkl")
-    test_edit_feature = joblib.load("pkl/test_edit_feature.pkl")
+    train_sequence_feature = joblib.load("pkl/train_sequence_feature.pkl")
+    test_sequence_feature = joblib.load("pkl/test_sequence_feature.pkl")
 
 
-    train_features = np.concatenate([train_feature_emb, train_w_overlap_feature, train_c_overlap_feature, train_edit_feature], axis=1)
-    test_features = np.concatenate([test_feature_emb, test_w_overlap_feature, test_c_overlap_feature,test_edit_feature], axis=1)
+    train_features = np.concatenate([train_feature_emb, train_w_overlap_feature, train_c_overlap_feature, train_sequence_feature], axis=1)
+    test_features = np.concatenate([test_feature_emb, test_w_overlap_feature, test_c_overlap_feature,test_sequence_feature], axis=1)
 
     x_train, x_test, y_train, y_test = cross_validation.train_test_split(train_features,train_labels, test_size=0, random_state=3)  
 
