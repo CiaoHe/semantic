@@ -311,22 +311,19 @@ def process(tok2indx, indx2tok, textfile, grades):
 
 
   
-def train_voting(train_data, train_tags, x_test): 
+# def train_voting(train_data, train_tags, x_test): 
 
-    clf1 = LogisticRegression(random_state=1)
-    clf2 = RandomForestClassifier(random_state=1)
-    clf3 = GaussianNB()
-    clf4 = KNeighborsClassifier(4)
-    clf5 = AdaBoostClassifier()
-    clf6 = SVC(kernel="linear", C=1100)
-
-    eclf = VotingClassifier(estimators=[('lr', clf1), ('rf', clf2), ('gnb', clf3), ('knn', clf4), ('svm', clf6), ('adb', clf5)], voting='hard', weights=None)
-
-    eclf.fit(train_data, train_tags)
-
-    pred = eclf.predict(x_test)
- 
-    return pred
+#     clf1 = LogisticRegression(random_state=1)
+#     clf2 = RandomForestClassifier(random_state=1)
+#     clf3 = GaussianNB()
+#     clf4 = KNeighborsClassifier(4)
+#     clf5 = AdaBoostClassifier()
+#     clf6 = SVC(kernel="linear", C=1100)
+#     eclf = VotingClassifier(estimators=[
+#('lr', clf1), ('rf', clf2), ('gnb', clf3), ('knn', clf4), ('svm', clf6), ('adb', clf5)], voting='hard', weights=None)
+#     eclf.fit(train_data, train_tags)
+#     pred = eclf.predict(x_test)
+#     return pred
 
 
 
@@ -387,7 +384,7 @@ def get_gram_overlap_feature(filetext,train=None,test=None):
     '''
     process: 把每个句子对的n-gram重合的特征存储起来,以及句子长度，编辑距离特征
     params: filetext:文档
-    result: edit_feature.pkl,编辑距离特征文档
+    result: sequence_feature.pkl,  sequence特征文档
             w123_gram_overlap.pkl, N-gram(词)重合特征文档 
             c2345_gram_overlap.pkl, N-gram（字符）重合特征文档 [[edit(s1,s2)]...]
             len_feature.pkl, 长度特征文档 [[len(s1),len(s2)]...]
@@ -397,7 +394,7 @@ def get_gram_overlap_feature(filetext,train=None,test=None):
     f.close()
     word_gram_123_feature = []
     ch_gram_2345_features = []
-    edit_features = []
+    sequence_features = []
     len_feature = []
 
     for line in lines:
@@ -414,29 +411,33 @@ def get_gram_overlap_feature(filetext,train=None,test=None):
         v2.append(ch_ngram_overlap(sen1, sen2, 3))
         v2.append(ch_ngram_overlap(sen1, sen2, 4))
         v2.append(ch_ngram_overlap(sen1, sen2, 5))
+        v3.append(lc_prefix(sen1, sen2))
+        v3.append(lc_suffix(sen1, sen2))
+        v3.append(lc_substring(sen1, sen2))
+        v3.append(lc_sequence(sen1, sen2))
         v3.append(edit_dis(sen1, sen2))
         v4.append(len(sen1))
         v4.append(len(sen2))
         word_gram_123_feature.append(v1)
         ch_gram_2345_features.append(v2)
-        edit_features.append(v3)
+        sequence_features.append(v3)
         len_feature.append(v4)
 
     if train is not None:
-        joblib.dump(edit_features, "pkl/{}edit_feature.pkl".format('train_'), compress=3)
+        joblib.dump(sequence_features, "pkl/{}sequence_feature.pkl".format('train_'), compress=3)
         joblib.dump(word_gram_123_feature, "pkl/{}w123_gram_overlap.pkl".format("train_"), compress=3)
         joblib.dump(ch_gram_2345_features, "pkl/{}c2345_gram_overlap.pkl".format("train_"), compress=3)
         joblib.dump(len_feature, "pkl/{}len_feature.pkl".format("train_"), compress=3)
 
     if test is not None:
-        joblib.dump(edit_features, "pkl/{}edit_feature.pkl".format('test_'), compress=3)
+        joblib.dump(sequence_features, "pkl/{}sequence_feature.pkl".format('test_'), compress=3)
         joblib.dump(word_gram_123_feature, "pkl/{}w123_gram_overlap.pkl".format("test_"), compress=3)
         joblib.dump(ch_gram_2345_features, "pkl/{}c2345_gram_overlap.pkl".format("test_"), compress=3)
         joblib.dump(len_feature, "pkl/{}len_feature.pkl".format("test_"), compress=3)
 
-
 '''
-获取sequence Features, 共longest common prefix/suffix/substring/sequence 和 levenshten(edit-distance)五个features
+获取sequence Features, 共longest common prefix/suffix/substring/sequence 
+和 levenshten(edit-distance)五个features
 '''
 def lc_prefix(sen1, sen2):
     sen1 = sen1.split()
@@ -499,45 +500,6 @@ def lc_sequence(sen1, sen2):
 # 计算两个句子的编辑距离
 def edit_dis(s1, s2):
     return distance.levenshtein(s1, s2)
-
-def get_sequence_feature(filetext,train=None,test=None):
-    f = open(filetext)
-    lines = f.readlines()
-    f.close()
-    longest_common_prefix = []
-    longest_common_suffix = []
-    longest_common_substring = []
-    longest_common_sequence = []
-
-    for line in lines:
-        v1 = []
-        v2 = []
-        v3 = []
-        v4 = []
-        sen1 = line.split('\t')[0]
-        sen2 = line.split('\t')[1]
-        v1.append(lc_prefix(sen1,sen2))
-        v2.append(lc_suffix(sen1,sen2))
-        v3.append(lc_substring(sen1, sen2))
-        v4.append(lc_sequence(sen1, sen2))
-        longest_common_prefix.append(v1)
-        longest_common_suffix.append(v2)
-        longest_common_substring.append(v3)
-        longest_common_sequence.append(v4)
-
-    if train is not None:
-        joblib.dump(edit_features, "pkl/{}longest_common_prefix.pkl".format('train_'), compress=3)
-        joblib.dump(word_gram_123_feature, "pkl/{}longest_common_suffix.pkl".format("train_"), compress=3)
-        joblib.dump(ch_gram_2345_features, "pkl/{}longest_common_substring.pkl".format("train_"), compress=3)
-        joblib.dump(len_feature, "pkl/{}longest_common_sequence.pkl".format("train_"), compress=3)
-
-    if test is not None:
-        joblib.dump(edit_features, "pkl/{}longest_common_prefix.pkl".format('test_'), compress=3)
-        joblib.dump(word_gram_123_feature, "pkl/{}longest_common_suffix.pkl".format("test_"), compress=3)
-        joblib.dump(ch_gram_2345_features, "pkl/{}longest_common_substring.pkl".format("test_"), compress=3)
-        joblib.dump(len_feature, "pkl/{}longest_common_sequence.pkl".format("test_"), compress=3)
-
-
 
   
 def evaluate(actual, pred):  
