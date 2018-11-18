@@ -183,7 +183,8 @@ def get_embedding():
     train_text2 = np.load('data/train_x2.npy')
     train_grade = np.load('data/train_y.npy')
     word_emb = np.load('data/embedding_matrix.npy')
-    word_dict = np.load('pkl/word_index.pkl')
+    tokenizer = np.load('pkl/Tokenizer.pkl')
+    word_dict = tokenizer.word_index
 
     train_text_features = np.zeros((len(train_text1), 900), "float32")
     train_text1_f = np.zeros((len(train_text1), 300), "float32")
@@ -225,8 +226,9 @@ def get_test_embedding():
     test_text1 = np.load('data/test_x1.npy')
     test_text2 = np.load('data/test_x2.npy')
     test_grade = np.load('data/test_y.npy')
-    word_emb = np.load('data/embedding_test_matrix.npy')
-    word_dict = np.load('pkl/word_test_index.pkl')
+    word_emb = np.load('data/embedding_matrix.npy')
+    tokenizer = np.load('pkl/Tokenizer.pkl')
+    word_dict = tokenizer.word_index
 
     test_text_features = np.zeros((len(test_text1), 900), "float32")
     test_text1_f = np.zeros((len(test_text1), 300), "float32")
@@ -552,7 +554,7 @@ def main():
     train_features = np.concatenate([train_feature_emb, train_w_overlap_feature, train_c_overlap_feature, train_sequence_feature], axis=1)
     test_features = np.concatenate([test_feature_emb, test_w_overlap_feature, test_c_overlap_feature,test_sequence_feature], axis=1)
 
-    x_train, x_test, y_train, y_test = cross_validation.train_test_split(train_features,train_labels, test_size=0, random_state=3)  
+    x_train, x_val, y_train, y_val = train_test_split(train_features,train_labels, test_size=0.2, random_state=3)  
 
     
 
@@ -596,19 +598,46 @@ def main():
     model2=ada.fit(x_train, y_train)
     model3=xgb.fit(x_train, y_train)
 
+    #for validation part:
+    print("\nIn validation:")
+    y_pred0_val = model0.predict(x_val)
+    print("==========for model:RandomForestRegressor==========")
+    evaluate(y_pred0_val, y_val)
+    y_pred1_val = model1.predict(x_val)
+    print("==========for model:AdaBoostRegressor==========")
+    evaluate(y_pred1_val, y_val)
+    y_pred2_val = model2.predict(x_val)
+    print("==========for model:GradientBoostingRegressor==========")
+    evaluate(y_pred2_val, y_val)
+    y_pred3_val = model3.predict(x_val)
+    print("==========for model:XGBRegressor==========")
+    evaluate(y_pred3_val, y_val)
+
+    y_pred_val = np.divide((y_pred0_val+y_pred1_val+y_pred2_val+y_pred3_val),4)
+    print("==========for embedding_ML_model==========")
+    evaluate(y_pred_val, y_val)
+
+
+    #for test part:
+    print("\nIn test:")
     y_pred0 = model0.predict(test_features)
+    print("==========for model:RandomForestRegressor==========")
     evaluate(y_pred0, test_labels)
     y_pred1 = model1.predict(test_features)
+    print("==========for model:AdaBoostRegressor==========")
     evaluate(y_pred1, test_labels)
     y_pred2 = model2.predict(test_features)
+    print("==========for model:GradientBoostingRegressor==========")
     evaluate(y_pred2, test_labels)
     y_pred3 = model3.predict(test_features)
+    print("==========for model:XGBRegressor==========")
     evaluate(y_pred3, test_labels)
 
-    y_pred = np.divide(np.add(y_pred0, y_pred1),2)
+    y_pred = np.divide((y_pred0+y_pred1+y_pred2+y_pred3),4)
+    print("==========for embedding_ML_model==========")
     evaluate(y_pred, test_labels)
     
-    # loss(y_pred, y_test)
+    loss(y_pred_val, y_val)
 
 if __name__ == '__main__':
     # main()
