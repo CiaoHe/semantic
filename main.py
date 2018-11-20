@@ -30,6 +30,8 @@ from sklearn.model_selection import cross_val_score #score evaluation
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold #for K-fold cross validation
 import distance
+import scipy
+import collections
 
 
 def cos_sim(v1, v2):
@@ -157,11 +159,51 @@ def get_key(dic, idx):
             return key
     return None
 
-# 导入预训练的词embedding，句子的embedding是词的embedding和词的idf相乘之后相加取平均，句子对的表示是两个句子的分别的表示cancat，
-# 在拼接两个句子表示的embedding相减得结果; 得到text_features
+
+def chebyshev_distances(v1,v2):
+    return np.max(abs(v1-v2))
+
+
+def dimension_reduction(f1,f2):
+    '''
+    params: f1,f2: nparray(1*n)
+    return: text_feature: nparray(1*11)
+    用于降维处理
+    '''
+    text_feature=np.zeros((1,11),"float32")
+    #linear kernel
+    cosine_distance=metrics.pairwise.cosine_distances(f1,f2)
+    text_feature[0][0]=cosine_distance
+    manhattan_distance=metrics.pairwise.manhattan_distances(f1,f2)
+    text_feature[0][1]=manhattan_distance
+    euclidean_distance=metrics.pairwise.euclidean_distances(f1,f2)
+    text_feature[0][2]=euclidean_distance
+    chebyshev_distance=chebyshev_distances(f1[0],f2[0])
+    text_feature[0][3]=chebyshev_distance
+    #stat kernel
+    pearson_coefficient=np.corrcoef(f1,f2)[0][1]
+    text_feature[0][4]=pearson_coefficient
+    spearman_coefficient=scipy.stats.spearmanr(f1[0],f2[0])[0]
+    text_feature[0][5]=spearman_coefficient
+    kendall_tau_coefficient=scipy.stats.kendalltau(f1[0],f2[0])[0]
+    text_feature[0][6]=kendall_tau_coefficient
+    #non-linear kernel
+    polynomial=metrics.pairwise.polynomial_kernel(f1,f2)
+    text_feature[0][7]=polynomial
+    rbf=metrics.pairwise.rbf_kernel(f1,f2)
+    text_feature[0][8]=rbf
+    laplacian=metrics.pairwise.laplacian_kernel(f1,f2)
+    text_feature[0][9]=laplacian
+    sigmoid=metrics.pairwise.sigmoid_kernel(f1,f2)
+    text_feature[0][10]=sigmoid
+
+    return text_feature
+
+
 def get_embedding():
     '''
-    result: 1.保存所有分词的idf，path=idf_all.pkl
+    导入预训练的词embedding，句子的embedding是词的embedding和词的idf相乘之后相加取平均，句子对的表示是两个句子的分别的表示cancat，
+    在拼接两个句子表示的embedding相减得结果; 得到text_features
 
     '''
     textfile = 'Med_corpus/Med-train.txt'
@@ -186,7 +228,8 @@ def get_embedding():
     tokenizer = np.load('pkl/Tokenizer.pkl')
     word_dict = tokenizer.word_index
 
-    train_text_features = np.zeros((len(train_text1), 900), "float32")
+    # train_text_features = np.zeros((len(train_text1), 900), "float32")
+    train_text_features=np.zeros((len(train_text1),11),"float32")
     train_text1_f = np.zeros((len(train_text1), 300), "float32")
     train_text2_f = np.zeros((len(train_text1), 300), "float32")
 
@@ -200,7 +243,6 @@ def get_embedding():
                 idf_all[k] = 0
             f1 = f1 + word_emb[indx] * idf_all[k]
         f1 = np.divide(f1, len(train_text1[i]))
-        
 
         for j, indx in enumerate(train_text2[i]):
             k = get_key(word_dict, indx)
@@ -209,15 +251,12 @@ def get_embedding():
             f2 = f2 + word_emb[indx] * idf_all[k]
         f2 = np.divide(f2, len(train_text2[i]))
         
-        # print(f1)
-        # print(f2)
+        #降维处理
+        train_text_features[i]=dimension_reduction(f1,f2)
 
-        f_div = f1-f2
-        f_and_f1 = np.concatenate((f_div,f1),axis=1)
-        train_text_features[i] = np.concatenate((f_and_f1,f2),axis=1)
     # 对特征再规范化
     text_features_scaled = preprocessing.scale(train_text_features)
-    joblib.dump((text_features_scaled, train_grade), "pkl/train_feature_label.pkl", compress=3) 
+    joblib.dump((text_features_scaled, train_grade), "pkl/train_embedding_feature_label.pkl", compress=3) 
 
 
 def get_test_embedding():
@@ -230,7 +269,8 @@ def get_test_embedding():
     tokenizer = np.load('pkl/Tokenizer.pkl')
     word_dict = tokenizer.word_index
 
-    test_text_features = np.zeros((len(test_text1), 900), "float32")
+    # test_text_features = np.zeros((len(test_text1), 900), "float32")
+    test_text_features=np.zeros((len(test_text1),11),"float32")
     test_text1_f = np.zeros((len(test_text1), 300), "float32")
     test_text2_f = np.zeros((len(test_text1), 300), "float32")
 
@@ -254,13 +294,73 @@ def get_test_embedding():
         
         # print(f1)
         # print(f2)
-
-        f_div = f1-f2
-        f_and_f1 = np.concatenate((f_div,f1),axis=1)
-        test_text_features[i] = np.concatenate((f_and_f1,f2),axis=1)
+        test_text_features[i]=dimension_reduction(f1,f2)
     # 对特征再规范化
     text_features_scaled = preprocessing.scale(test_text_features)
-    joblib.dump((text_features_scaled, test_grade), "pkl/test_feature_label.pkl", compress=3) 
+    joblib.dump((text_features_scaled, test_grade), "pkl/test_embedding_feature_label.pkl", compress=3) 
+
+
+def get_BOW_features():
+    '''
+    导入预训练的词的BOW，乘以IDF，之后进行统一降维处理
+    '''
+    textfile = 'Med_corpus/Med-train.txt'
+    f1 = open(textfile)
+    texts = f1.readlines()
+    f1.close()
+    
+    
+    train_text_features=np.zeros((len(texts),11),"float32")
+
+    for i,line in enumerate(texts):
+        s1 = line.split('\t')[0]
+        s2 = line.split('\t')[1]
+        corpus=[s1,s2]
+        vectorizer=CountVectorizer()
+        transformer = TfidfTransformer()
+        tfidf = transformer.fit_transform(vectorizer.fit_transform(corpus))
+        tfidf=tfidf.toarray()
+
+        f1,f2=np.zeros((1,len(tfidf[0])),"float32"),np.zeros((1,len(tfidf[0])),"float32")
+        f1[0],f2[0]=tfidf[0],tfidf[1]
+        train_text_features[i]=dimension_reduction(f1,f2)
+
+    # 对特征再规范化
+    text_features_scaled = preprocessing.scale(train_text_features)
+    joblib.dump(text_features_scaled, "pkl/train_BOW_feature_label.pkl", compress=3) 
+
+
+def get_test_BOW_features():
+    '''
+    导入预训练的词的BOW，乘以IDF，之后进行统一降维处理
+    '''
+    textfile = 'Med_corpus/Med-test.txt'
+    f1 = open(textfile)
+    texts = f1.readlines()
+    f1.close()
+    
+    
+    test_text_features=np.zeros((len(texts),11),"float32")
+
+    for i,line in enumerate(texts):
+        s1 = line.split('\t')[0]
+        s2 = line.split('\t')[1]
+        corpus=[s1,s2]
+        vectorizer=CountVectorizer()
+        transformer = TfidfTransformer()
+        tfidf = transformer.fit_transform(vectorizer.fit_transform(corpus))
+        tfidf=tfidf.toarray()
+
+        f1,f2=np.zeros((1,len(tfidf[0])),"float32"),np.zeros((1,len(tfidf[0])),"float32")
+        f1[0],f2[0]=tfidf[0],tfidf[1]
+        test_text_features[i]=dimension_reduction(f1,f2)
+
+
+    # 对特征再规范化
+    text_features_scaled = preprocessing.scale(test_text_features)
+    joblib.dump(text_features_scaled, "pkl/test_BOW_feature_label.pkl", compress=3) 
+
+
 
 # 应用向量空间模型的表示进行操作得到句子对的特征(用cos_sim计算)，并把特征存储
 def process(tok2indx, indx2tok, textfile, grades):
@@ -531,15 +631,23 @@ def score_func(y_pred,y_test):
     pearson = np.corrcoef(y_pred, y_test)[0][1]
     return pearson
     
-def main():
+def main(recollectFeatures=True):
     
     # process(tok2indx, indx2tok, textfile, grades)
     # get_embedding:获取
-    get_embedding()
-    get_test_embedding()
+    if recollectFeatures==True:
+        get_gram_overlap_feature('data/new_train.txt',train=True)
+        get_gram_overlap_feature('data/new_test.txt',test=True)
+        get_embedding()
+        get_test_embedding()
+        get_BOW_features()
+        get_test_BOW_features()
 
-    train_feature_emb, train_labels = joblib.load("pkl/train_feature_label.pkl") 
-    test_feature_emb, test_labels = joblib.load("pkl/test_feature_label.pkl") 
+    train_feature_emb, train_labels = joblib.load("pkl/train_embedding_feature_label.pkl") 
+    test_feature_emb, test_labels = joblib.load("pkl/test_embedding_feature_label.pkl") 
+
+    train_feature_bow=joblib.load("pkl/train_BOW_feature_label.pkl")
+    test_feature_bow=joblib.load("pkl/test_BOW_feature_label.pkl")
 
     train_w_overlap_feature = joblib.load("pkl/train_w123_gram_overlap.pkl")
     train_c_overlap_feature = joblib.load("pkl/train_c2345_gram_overlap.pkl")
@@ -550,13 +658,21 @@ def main():
     train_sequence_feature = joblib.load("pkl/train_sequence_feature.pkl")
     test_sequence_feature = joblib.load("pkl/test_sequence_feature.pkl")
 
+ 
+    # train_features = np.concatenate([train_feature_emb,train_feature_bow,
+    #     train_w_overlap_feature,train_c_overlap_feature,train_sequence_feature], 
+    #     axis=1)
+    # test_features = np.concatenate([test_feature_emb,test_feature_bow,
+    #     test_w_overlap_feature,test_c_overlap_feature,test_sequence_feature], 
+    #     axis=1)
+    train_features = np.concatenate([train_feature_emb,train_w_overlap_feature,train_c_overlap_feature,train_sequence_feature],axis=1)
+    test_features= np.concatenate([test_feature_emb,test_w_overlap_feature,test_c_overlap_feature,test_sequence_feature],axis=1)
 
-    train_features = np.concatenate([train_feature_emb, train_w_overlap_feature, train_c_overlap_feature, train_sequence_feature], axis=1)
-    test_features = np.concatenate([test_feature_emb, test_w_overlap_feature, test_c_overlap_feature,test_sequence_feature], axis=1)
-
+    train_features = preprocessing.scale(train_features)
+    test_features = preprocessing.scale(test_features)
+    print(train_features.shape)
     x_train, x_val, y_train, y_val = train_test_split(train_features,train_labels, test_size=0.2, random_state=3)  
 
-    
 
     ###########TRAIN PART###########################
     #创建评价函数
@@ -591,7 +707,7 @@ def main():
     gbr = ensemble.GradientBoostingRegressor(n_estimators=50)
     from xgboost import XGBRegressor
     xgb = XGBRegressor(nthread=4)
-
+    
 
     model0=rf.fit(x_train, y_train)
     model1=gbr.fit(x_train, y_train)
@@ -617,6 +733,18 @@ def main():
     print("==========for embedding_ML_model==========")
     evaluate(y_pred_val, y_val)
 
+    y_pred_val = np.divide((y_pred1_val+y_pred2_val+y_pred3_val),3)
+    print("==========for embedding_ML_model_1==========")
+    evaluate(y_pred_val, y_val)
+
+    y_pred_val = np.divide((y_pred2_val+y_pred3_val),2)
+    print("==========for embedding_ML_model_2==========")
+    evaluate(y_pred_val, y_val)
+
+    y_pred_val = np.divide((y_pred0_val+y_pred2_val+y_pred3_val),3)
+    print("==========for embedding_ML_model_3==========")
+    evaluate(y_pred_val, y_val)
+
 
     #for test part:
     print("\nIn test:")
@@ -636,14 +764,25 @@ def main():
     y_pred = np.divide((y_pred0+y_pred1+y_pred2+y_pred3),4)
     print("==========for embedding_ML_model==========")
     evaluate(y_pred, test_labels)
+
+    y_pred = np.divide((y_pred1+y_pred2+y_pred3),3)
+    print("==========for embedding_ML_model_1==========")
+    evaluate(y_pred, test_labels)
+
+    y_pred = np.divide((y_pred2+y_pred3),2)
+    print("==========for embedding_ML_model_2==========")
+    evaluate(y_pred, test_labels)
+
+    y_pred = np.divide((y_pred0+y_pred2+y_pred3),3)
+    print("==========for embedding_ML_model_3==========")
+    evaluate(y_pred, test_labels)
     
-    loss(y_pred_val, y_val)
+    # loss(y_pred_val, y_val)
 
 if __name__ == '__main__':
     # main()
     # get_embedding()
-    get_gram_overlap_feature('data/new_train.txt',train=True)
-    get_gram_overlap_feature('data/new_test.txt',test=True)
-    main()
+    
+    main(recollectFeatures=False)
 
     # print(longest_suffix("are right", "rightd"))
